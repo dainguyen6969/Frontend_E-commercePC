@@ -1,27 +1,42 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, ChangeEvent, FormEvent, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation'; // Import useSearchParams
 
 // Giả định: Next.js App sử dụng Tailwind CSS
 const API_BASE_URL = 'http://localhost:8080';
 
+// --- Interfaces (Kiểu dữ liệu TypeScript) ---
+
+interface GoogleAuthButtonProps {
+  isSignup: boolean;
+  // Bổ sung: Hàm xử lý chuyển hướng sau khi thành công
+  onAuthSuccess: (path: string) => void;
+}
+
+type ViewType = 'login' | 'signup';
+
+interface SwitchProps {
+  onSwitch: (view: ViewType) => void;
+  // Bổ sung: Hàm xử lý chuyển hướng sau khi thành công
+  onAuthSuccess: (path: string) => void;
+}
+
+// --- Components ---
+
 // Component dùng chung cho nút đăng nhập/ký bằng Google
-// LƯU Ý: Logic này là MOCK. Cần tích hợp thư viện Google OAuth thực tế.
-const GoogleAuthButton = ({ isSignup }) => {
+const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({ isSignup, onAuthSuccess }) => {
   const [loading, setLoading] = useState(false);
-  
+
   const handleGoogleAuth = async () => {
     setLoading(true);
     
-    // MOCK: Giả lập quá trình chuyển hướng và nhận token
     const endpoint = isSignup ? 'google-signup' : 'google-login';
     console.log(`Bắt đầu xác thực Google... Gửi yêu cầu đến ${API_BASE_URL}/${endpoint}`);
     
-    // Trong môi trường thực tế, bạn sẽ nhận được một Google ID Token
     const MOCK_TOKEN = "MOCK_GOOGLE_ID_TOKEN_12345"; 
 
     try {
-        // Giả lập cuộc gọi API gửi token về backend
         const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -32,19 +47,14 @@ const GoogleAuthButton = ({ isSignup }) => {
 
         if (response.ok) {
             localStorage.setItem('auth_token', data.token); 
-            // KHÔNG dùng alert() trong môi trường iframe, dùng console.log/custom UI thay thế
             console.log(`Đăng nhập Google thành công! Token: ${data.token}`);
-            // alert(`Đăng nhập Google thành công! Đang chuyển hướng...`); 
+            onAuthSuccess('/'); // Gọi hàm chuyển hướng
         } else {
-             // KHÔNG dùng alert() trong môi trường iframe
             console.error(data.message || 'Xác thực Google thất bại.');
-            // alert(data.message || 'Xác thực Google thất bại.');
         }
 
     } catch (error) {
         console.error('Lỗi kết nối Google API/Backend:', error);
-        // KHÔNG dùng alert() trong môi trường iframe
-        // alert('Lỗi kết nối. Vui lòng kiểm tra cấu hình Google OAuth và CORS.');
     } finally {
         setLoading(false);
     }
@@ -69,33 +79,35 @@ const GoogleAuthButton = ({ isSignup }) => {
 };
 
 // Component Form Đăng Ký
-const SignupForm = ({ onSwitch }) => {
+const SignupForm: React.FC<SwitchProps> = ({ onSwitch, onAuthSuccess }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  // 1. THÊM STATE CHO NHẬP LẠI MẬT KHẨU
   const [confirmPassword, setConfirmPassword] = useState(''); 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
-  const handleSignup = async (e) => {
+  const handleUsernameChange = (e: ChangeEvent<HTMLInputElement>) => setUsername(e.target.value);
+  const handlePasswordChange = (e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value);
+  const handleConfirmPasswordChange = (e: ChangeEvent<HTMLInputElement>) => setConfirmPassword(e.target.value);
+
+  const handleSignup = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setMessage('');
     
-    // 3. LOGIC KIỂM TRA MẬT KHẨU CÓ KHỚP HAY KHÔNG
     if (password !== confirmPassword) {
       setMessage('Lỗi: Mật khẩu và Nhập lại mật khẩu không khớp.');
-      return; // Dừng việc gửi API nếu không khớp
+      return; 
     }
 
     setLoading(true);
 
     try {
+      // Endpoint đăng ký: /trongdai/users
       const response = await fetch(`${API_BASE_URL}/trongdai/users`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        // Chỉ gửi username và password lên server
         body: JSON.stringify({ username, password }), 
       });
 
@@ -103,6 +115,7 @@ const SignupForm = ({ onSwitch }) => {
 
       if (response.ok) {
         setMessage('Đăng ký thành công! Vui lòng đăng nhập.');
+        // Sau khi đăng ký thành công, tự động chuyển sang form Đăng nhập
         setTimeout(() => onSwitch('login'), 2000);
       } else {
         setMessage(data.message || 'Đăng ký thất bại. Tên đăng nhập có thể đã tồn tại.');
@@ -119,7 +132,7 @@ const SignupForm = ({ onSwitch }) => {
     <div className="p-6 bg-white rounded-xl shadow-2xl w-full max-w-sm">
       <h2 className="text-3xl font-bold mb-6 text-center text-indigo-600">Đăng Ký</h2>
       
-      <GoogleAuthButton isSignup={true} />
+      <GoogleAuthButton isSignup={true} onAuthSuccess={onAuthSuccess} />
       
       <div className="relative flex items-center justify-center my-6">
         <div className="flex-grow border-t border-gray-300"></div>
@@ -134,7 +147,7 @@ const SignupForm = ({ onSwitch }) => {
             id="signup-username"
             type="text" 
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={handleUsernameChange}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
             placeholder="Tên đăng nhập của bạn"
             required
@@ -146,20 +159,19 @@ const SignupForm = ({ onSwitch }) => {
             id="signup-password"
             type="password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={handlePasswordChange}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
             placeholder="********"
             required
           />
         </div>
-        {/* 2. THÊM TRƯỜNG NHẬP LẠI MẬT KHẨU */}
         <div> 
           <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="confirm-password">Nhập lại mật khẩu</label>
           <input
             id="confirm-password"
             type="password"
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
+            onChange={handleConfirmPasswordChange}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
             placeholder="********"
             required
@@ -194,32 +206,41 @@ const SignupForm = ({ onSwitch }) => {
 };
 
 // Component Form Đăng Nhập
-const LoginForm = ({ onSwitch }) => {
-  const [username, setUsername] = useState(''); // Tên đăng nhập
+const LoginForm: React.FC<SwitchProps> = ({ onSwitch, onAuthSuccess }) => {
+  const [username, setUsername] = useState(''); 
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
-  const handleLogin = async (e) => {
+  const handleUsernameChange = (e: ChangeEvent<HTMLInputElement>) => setUsername(e.target.value);
+  const handlePasswordChange = (e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value);
+
+  const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setMessage('');
     setLoading(true);
 
     try {
+      // Endpoint đăng nhập: /trongdai/auth/token
       const response = await fetch(`${API_BASE_URL}/trongdai/auth/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username, password }), // Gửi username
+        body: JSON.stringify({ username, password }), 
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        localStorage.setItem('auth_token', data.token); 
+        localStorage.setItem('auth_token', data.result.token); // Sử dụng data.result.token theo cấu trúc ApiResponse
         setMessage('Đăng nhập thành công! Đang chuyển hướng...');
-        // Thường thì sau đó sẽ chuyển hướng người dùng đến Dashboard
+        
+        // Chuyển hướng người dùng về trang chủ hoặc trang redirect
+        setTimeout(() => {
+          onAuthSuccess('/'); 
+        }, 100); 
+        
       } else {
         setMessage(data.message || 'Đăng nhập thất bại. Vui lòng kiểm tra thông tin.');
       }
@@ -236,7 +257,7 @@ const LoginForm = ({ onSwitch }) => {
       <h2 className="text-3xl font-bold mb-6 text-center text-indigo-600">Đăng Nhập</h2>
 
       {/* Nút Đăng nhập bằng Google */}
-      <GoogleAuthButton isSignup={false} />
+      <GoogleAuthButton isSignup={false} onAuthSuccess={onAuthSuccess} />
 
       <div className="relative flex items-center justify-center my-6">
         <div className="flex-grow border-t border-gray-300"></div>
@@ -251,7 +272,7 @@ const LoginForm = ({ onSwitch }) => {
             id="login-username"
             type="text" 
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={handleUsernameChange}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
             placeholder="Tên đăng nhập của bạn"
             required
@@ -263,7 +284,7 @@ const LoginForm = ({ onSwitch }) => {
             id="login-password"
             type="password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={handlePasswordChange}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
             placeholder="********"
             required
@@ -297,17 +318,32 @@ const LoginForm = ({ onSwitch }) => {
 };
 
 // Component chính
-const App = () => {
+const App: React.FC = () => {
   // state để chuyển đổi giữa hai form: 'login' hoặc 'signup'
-  const [currentView, setCurrentView] = useState('login'); 
+  const [currentView, setCurrentView] = useState<ViewType>('login'); 
+  const router = useRouter();
+  const searchParams = useSearchParams(); // Hook để lấy tham số URL
+  
+  // Hàm xử lý chuyển hướng chung sau khi đăng nhập thành công
+  const handleAuthSuccess = () => {
+    // 1. Kiểm tra tham số 'redirect' trong URL
+    const redirectPath = searchParams.get('redirect');
+    
+    // 2. Chuyển hướng tới path được yêu cầu hoặc mặc định về trang chủ (/)
+    if (redirectPath && redirectPath.startsWith('/')) {
+        router.push(redirectPath);
+    } else {
+        router.push('/');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4 font-sans">
       <h1 className="text-4xl font-extrabold text-gray-800 mb-8">Ứng Dụng Xác Thực</h1>
       {currentView === 'login' ? (
-        <LoginForm onSwitch={setCurrentView} />
+        <LoginForm onSwitch={setCurrentView} onAuthSuccess={handleAuthSuccess} />
       ) : (
-        <SignupForm onSwitch={setCurrentView} />
+        <SignupForm onSwitch={setCurrentView} onAuthSuccess={handleAuthSuccess} />
       )}
       
       {/* Footer cho môi trường phát triển */}
@@ -315,7 +351,7 @@ const App = () => {
         <p className="font-bold">LƯU Ý QUAN TRỌNG VỀ API & GOOGLE OAUTH:</p>
         <p className="text-sm">Hiện tại, ứng dụng này đang cố gắng gửi yêu cầu đến <code>{API_BASE_URL}</code>. Để ứng dụng hoạt động, bạn cần:</p>
         <ol className="list-decimal list-inside text-sm mt-2 space-y-1">
-            <li>Thiết lập API Backend để xử lý các endpoint <code>/login</code>, <code>/signup</code>.</li>
+            <li>Thiết lập API Backend để xử lý các endpoint <code>/login</code>, <code>/signup</code>. (Đã sử dụng <code>/trongdai/auth/token</code> và <code>/trongdai/users</code>)</li>
             <li>**Đối với Google:** Thiết lập Backend để nhận và xác thực **Google ID Token** từ frontend.</li>
             <li>Cấu hình CORS trên Server Backend để cho phép domain của Next.js gửi yêu cầu.</li>
         </ol>

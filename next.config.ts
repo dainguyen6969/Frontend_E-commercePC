@@ -2,10 +2,6 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   images: {
-    // Đã xóa 'unoptimized: true' để BẬT lại tính năng tối ưu hóa hình ảnh.
-    
-    // Giữ lại remotePatterns để cho phép Next.js tối ưu hóa hình ảnh 
-    // từ các tên miền bên ngoài này.
     remotePatterns: [
       {
         protocol: 'https',
@@ -19,9 +15,15 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'picsum.photos',
       },
+      // THÊM CẤU HÌNH CHO LOCAL BACKEND (PORT 8080)
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '8080',
+        pathname: '/trongdai/static/**', // Đảm bảo khớp context path và thư mục static
+      }
     ],
   },
-  /* config options here */
 };
 
 export default nextConfig;

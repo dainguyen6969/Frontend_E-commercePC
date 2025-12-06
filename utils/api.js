@@ -1,9 +1,18 @@
 const API_BASE = "http://localhost:8080/trongdai"; // <-- Đã sửa: THÊM CONTEXT-PATH
 
 export async function apiGet(path) {
+  // Lấy token từ localStorage (chỉ hoạt động nếu code này chạy trong Client Component)
+  // Tuy nhiên, vì HomePage là Server Component, chúng ta không thể truy cập localStorage.
+  // Do đó, chúng ta phải dựa vào Backend cho phép các API GET này là public.
+
+  // NOTE: Trong môi trường Server Component (HomePage), chúng ta không thể dùng localStorage.
+  // Chúng ta chỉ có thể dựa vào cookie/header hoặc API phải là public.
+  // Giả định: Backend đã mở public cho GET /products và GET /categories.
+  
   const res = await fetch(`${API_BASE}${path}`, {
     method: "GET",
     cache: "no-store", // quan trọng cho Server Component
+    // Không thêm Auth Header ở đây vì không có cách an toàn để lấy token JWT từ Server Component
   });
 
   if (!res.ok) {
