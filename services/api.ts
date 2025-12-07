@@ -1,27 +1,15 @@
 import axios from "axios";
+// Sửa import để sử dụng SanPham, ApiResponse, SanPhamRequest từ types/Product
+import { SanPham, ApiResponse, SanPhamRequest } from "@/types/Product"; 
 
 // --- INTERFACES CHUNG ---
 
-interface ApiResponse<T> {
-  code: number;
-  message: string | null;
-  result: T;
-}
-
-interface IntrospectResponse { valid: boolean; roles: string[] | null; }
 interface ProfileResponse { isValid: boolean; roles: string[]; }
-
 export interface Category { id: number; ten: string; moTa: string; }
 interface CategoryRequest { ten: string; moTa: string; }
 
-// Interface cho Product (SanPham) Request
-interface ProductCreationRequest {
-    ten: string;
-    gia: number;
-    anh: string; // Chứa URL ảnh đã upload
-    danhMucId: number;
-    // Thêm các trường khác của SanPham nếu cần
-}
+// **LƯU Ý QUAN TRỌNG:** // Loại bỏ ProductCreationRequest cũ và sử dụng SanPhamRequest đã được import từ types/Product.ts
+// interface ProductCreationRequest { ... } <-- Bỏ qua
 
 const API_BASE_URL = 'http://localhost:8080/trongdai';
 
@@ -38,7 +26,6 @@ export const apiService = {
     }
   },
 
-  // HÀM 1: Introspect Token (Giữ nguyên)
   introspectToken: async (token: string): Promise<ProfileResponse | null> => {
     try {
         const response = await axios.post<ApiResponse<any>>(`${API_BASE_URL}/auth/introspect`, {
@@ -100,23 +87,20 @@ export const apiService = {
         return { success: true, message: "Xóa danh mục thành công." };
     } catch (error) {
         if (axios.isAxiosError(error) && error.response) {
-            throw new Error(error.response.data?.message || `Xóa danh mục ID ${danhMucId} thất bại.`);
+            throw new Error(error.response.data?.message || "Failed to create category.");
         }
         throw new Error("Network or unexpected error occurred during category deletion.");
     }
   },
 
-  // HÀM MỚI 5: Upload File ảnh qua Backend (Backend lưu và trả về URL)
   uploadImageViaBackend: async (file: File): Promise<string> => {
     const token = localStorage.getItem('auth_token');
     if (!token) { throw new Error("Unauthorized: Missing authentication token."); }
     
-    // Tạo FormData để chứa file Multipart
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-        // Endpoint /files/upload (Giả định Backend)
         const response = await axios.post<ApiResponse<{ url: string }>>(`${API_BASE_URL}/files/upload`, 
             formData,
             { 
@@ -127,35 +111,100 @@ export const apiService = {
         );
 
         if (response.data.code === 1000 && response.data.result?.url) {
-            return response.data.result.url; // Trả về URL công khai từ Backend
+            return response.data.result.url; 
         }
         throw new Error(response.data.message || "Backend không trả về URL ảnh hợp lệ.");
     } catch (error) {
         if (axios.isAxiosError(error) && error.response) {
-            // Lỗi Backend (ví dụ: file quá lớn, không đủ quyền)
             throw new Error(error.response.data?.message || "Lỗi khi upload ảnh qua Backend.");
         }
         throw new Error("Lỗi mạng khi upload ảnh.");
     }
   },
 
-  // HÀM MỚI 6: Tạo Sản phẩm (Gửi dữ liệu cuối cùng, bao gồm URL ảnh)
-  createProduct: async (productData: ProductCreationRequest) => {
+  createProduct: async (productData: SanPhamRequest) => { // Sử dụng SanPhamRequest
     const token = localStorage.getItem('auth_token');
     if (!token) { throw new Error("Unauthorized: Missing authentication token."); }
 
     try {
-        // Endpoint /products (Giả định Backend)
         const response = await axios.post<ApiResponse<any>>(`${API_BASE_URL}/products`, productData, {
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
         });
         return response.data; 
     } catch (error) {
         if (axios.isAxiosError(error) && error.response) {
-            // Lỗi Backend (ví dụ: validation sản phẩm)
-            throw new Error(error.response.data?.message || "Failed to create product.");
+            const backendError = error.response.data?.message || error.response.data?.result?.message;
+            throw new Error(backendError || "Failed to create product.");
         }
         throw new Error("Network or unexpected error occurred during product creation.");
     }
-  }
+  },
+
+  getAllProductsForAdmin: async (): Promise<SanPham[]> => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) { return []; }
+
+    try {
+        const response = await axios.get<ApiResponse<SanPham[]>>(`${API_BASE_URL}/products`, { 
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (response.data.code === 1000 && Array.isArray(response.data.result)) { 
+            return response.data.result; 
+        }
+        return [];
+    } catch (error) {
+        if (axios.isAxiosError(error)) {
+             console.error("Error fetching products for admin:", error.message, error.response?.data);
+        } else {
+             console.error("Error fetching products for admin:", error);
+        }
+        return [];
+    }
+  },
+
+  // *** THÊM HÀM MỚI: Lấy chi tiết sản phẩm theo ID ***
+  getProductById: async (productId: number): Promise<SanPham | null> => {
+    try {
+        const response = await axios.get<ApiResponse<SanPham>>(`${API_BASE_URL}/products/${productId}`);
+        
+        if (response.data.code === 1000 && response.data.result) { 
+            return response.data.result; 
+        }
+        return null;
+    } catch (error) {
+        console.error(`Error fetching product ID ${productId}:`, error);
+        return null;
+    }
+  },
+
+  // *** THÊM HÀM MỚI: Lấy sản phẩm liên quan ***
+  getRelatedProducts: async (danhMucId: number, excludedProductId: number): Promise<SanPham[]> => {
+    try {
+        const response = await axios.get<ApiResponse<SanPham[]>>(`${API_BASE_URL}/products/related/${danhMucId}/${excludedProductId}`);
+        
+        if (response.data.code === 1000 && Array.isArray(response.data.result)) { 
+            return response.data.result; 
+        }
+        return [];
+    } catch (error) {
+        console.error("Error fetching related products:", error);
+        return [];
+    }
+  },
+
+  deleteProduct: async (productId: number) => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) { throw new Error("Unauthorized: Missing authentication token."); }
+
+    try {
+        await axios.delete(`${API_BASE_URL}/products/${productId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+        return { success: true, message: "Xóa sản phẩm thành công." };
+    } catch (error) {
+        if (axios.isAxiosError(error) && error.response) {
+            throw new Error(error.response.data?.message || `Xóa sản phẩm ID ${productId} thất bại.`);
+        }
+        throw new Error("Network or unexpected error occurred during product deletion.");
+    }
+  },
 };

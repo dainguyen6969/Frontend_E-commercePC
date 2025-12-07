@@ -4,11 +4,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useState, FormEvent, ChangeEvent, useCallback } from 'react';
 import { apiService, Category } from '@/services/api';
-import { PlusCircle, Loader2, Image as ImageIcon, CheckCircle, Upload, XCircle, Package, Tags } from 'lucide-react';
+import { PlusCircle, Loader2, Image as ImageIcon, CheckCircle, Upload, XCircle, Package } from 'lucide-react';
+import { SanPhamRequest } from '@/types/Product'; // Phải đảm bảo interface này được export từ types/Product.ts
 
 const ADMIN_ROLE = 'ROLE_ADMIN';
 
-// --- Component Chính: Add Product Page (Đã sửa cú pháp export) ---
+// --- Component Chính: Add Product Page ---
 
 export default function AddProductPage() { // SỬ DỤNG CÚ PHÁP FUNCTION CHO EXPORT DEFAULT
   // Lấy trạng thái Auth từ hook
@@ -21,6 +22,12 @@ export default function AddProductPage() { // SỬ DỤNG CÚ PHÁP FUNCTION CHO
   const [selectedCategory, setSelectedCategory] = useState<number | string>('');
   const [productImage, setProductImage] = useState<File | null>(null); // File ảnh được chọn
   const [productImageUrl, setProductImageUrl] = useState<string>(''); // URL ảnh công khai (từ Backend sau khi upload)
+  
+  // TRƯỜNG SẢN PHẨM MỚI (Đã gộp) - Đã loại bỏ thuocTinh và giaTri
+  const [description, setDescription] = useState('');
+  const [soLuong, setSoLuong] = useState<number | string>('');
+  // const [thuocTinh, setThuocTinh] = useState(''); // Đã bỏ
+  // const [giaTri, setGiaTri] = useState('');     // Đã bỏ
   
   // States chung
   const [categories, setCategories] = useState<Category[]>([]);
@@ -36,6 +43,8 @@ export default function AddProductPage() { // SỬ DỤNG CÚ PHÁP FUNCTION CHO
         setCategories(list);
         if (list.length > 0) {
             setSelectedCategory(list[0].id); // Chọn danh mục đầu tiên làm mặc định
+        } else {
+            setSelectedCategory(''); // Không có danh mục nào
         }
     } catch (error) {
         console.error("Error fetching categories:", error);
@@ -101,11 +110,11 @@ export default function AddProductPage() { // SỬ DỤNG CÚ PHÁP FUNCTION CHO
 
     try {
         // Validation Front-end
-        if (!productName.trim() || !price || !selectedCategory) {
-            throw new Error("Vui lòng điền đầy đủ Tên, Giá và Danh mục.");
-        }
-        if (Number(price) <= 0) {
-            throw new Error("Giá sản phẩm phải lớn hơn 0.");
+        const numericPrice = Number(price);
+        const numericSoLuong = Number(soLuong);
+
+        if (!productName.trim() || numericPrice <= 0 || !selectedCategory || !description.trim() || numericSoLuong < 0) {
+            throw new Error("Vui lòng điền đầy đủ Tên, Giá (>0), Danh mục, Mô tả và Số lượng (>=0).");
         }
         if (!productImage) {
             throw new Error("Vui lòng chọn ảnh sản phẩm.");
@@ -115,11 +124,13 @@ export default function AddProductPage() { // SỬ DỤNG CÚ PHÁP FUNCTION CHO
         finalImageUrl = await uploadImage(productImage);
 
         // --- 2. GỬI DỮ LIỆU SẢN PHẨM ---
-        const productData = {
+        const productData: SanPhamRequest = {
             ten: productName.trim(),
-            gia: Number(price),
+            gia: numericPrice,
             anh: finalImageUrl, // Gửi URL ảnh đã lưu
             danhMucId: Number(selectedCategory),
+            moTa: description.trim(),
+            soLuong: numericSoLuong,     
         };
 
         const response = await apiService.createProduct(productData);
@@ -129,6 +140,10 @@ export default function AddProductPage() { // SỬ DỤNG CÚ PHÁP FUNCTION CHO
             // Reset form sau thành công
             setProductName('');
             setPrice('');
+            setDescription('');
+            setSoLuong('');
+            // setThuocTinh(''); // Đã bỏ
+            // setGiaTri(''); // Đã bỏ
             setProductImage(null);
             setProductImageUrl('');
             setSelectedCategory(categories.length > 0 ? categories[0].id : '');
@@ -155,15 +170,14 @@ export default function AddProductPage() { // SỬ DỤNG CÚ PHÁP FUNCTION CHO
 
   // Nếu là ADMIN, hiển thị Form
   return (
-    <div className="container mx-auto p-4 lg:p-8 max-w-4xl">
+    <div className="container mx-auto p-4 lg:p-8 max-w-5xl">
       <h1 className="text-3xl font-bold mb-6 text-indigo-700 flex items-center">
         <PlusCircle className="h-7 w-7 mr-3" />
         Quản Lý Sản Phẩm - Thêm Sản Phẩm Mới
       </h1>
 
       <p className="mb-6 text-sm text-gray-600 bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-        **LƯU Ý:** Chức năng upload ảnh hiện đang sử dụng API `/files/upload` giả định. 
-        Bạn cần triển khai endpoint này trong Backend Spring Boot để lưu file vào Local Disk và trả về URL public (ví dụ: `/static/filename`).
+        **LƯU Ý:** Form này sẽ gửi dữ liệu đầy đủ về Tên, Giá, Ảnh, Mô tả, và Số lượng đến API Backend.
       </p>
 
       {/* Message Box */}
@@ -180,6 +194,9 @@ export default function AddProductPage() { // SỬ DỤNG CÚ PHÁP FUNCTION CHO
             
             {/* Cột 1: Thông tin cơ bản */}
             <div className="space-y-4">
+                <h2 className="text-xl font-semibold text-indigo-600 border-b pb-2">Thông tin Cơ bản</h2>
+                
+                {/* Tên Sản phẩm */}
                 <div>
                   <label htmlFor="productName" className="block text-sm font-medium text-gray-700 mb-2">Tên Sản phẩm</label>
                   <input
@@ -194,6 +211,7 @@ export default function AddProductPage() { // SỬ DỤNG CÚ PHÁP FUNCTION CHO
                   />
                 </div>
 
+                {/* Giá (VNĐ) */}
                 <div>
                   <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-2">Giá (VNĐ)</label>
                   <input
@@ -209,7 +227,24 @@ export default function AddProductPage() { // SỬ DỤNG CÚ PHÁP FUNCTION CHO
                   />
                 </div>
                 
-                <div>
+                 {/* Số lượng Tồn kho */}
+                 <div>
+                  <label htmlFor="soLuong" className="block text-sm font-medium text-gray-700 mb-2">Số lượng Tồn kho</label>
+                  <input
+                    id="soLuong"
+                    type="number"
+                    value={soLuong}
+                    onChange={(e) => setSoLuong(e.target.value)}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="100"
+                    required
+                    min="0"
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                 {/* Danh mục */}
+                 <div>
                   <label htmlFor="category" className="block text-sm font-sm text-gray-700 mb-2">Danh mục</label>
                   {loadingCategories ? (
                     <div className="w-full p-3 bg-gray-100 rounded-lg animate-pulse">Đang tải...</div>
@@ -234,8 +269,26 @@ export default function AddProductPage() { // SỬ DỤNG CÚ PHÁP FUNCTION CHO
                 </div>
             </div>
 
-            {/* Cột 2: Upload Ảnh */}
+            {/* Cột 2: Mô tả & Ảnh */}
             <div className="space-y-4">
+                 <h2 className="text-xl font-semibold text-indigo-600 border-b pb-2">Mô tả & Hình ảnh</h2>
+                
+                {/* Mô tả Chi tiết */}
+                <div>
+                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">Mô tả Chi tiết</label>
+                  <textarea
+                    id="description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 resize-y"
+                    rows={8} // Tăng chiều cao để chiếm chỗ của các trường bị loại bỏ
+                    placeholder="Chi tiết về vi xử lý, Card đồ họa, RAM, Bộ nhớ..."
+                    required
+                    disabled={isSubmitting}
+                  />
+                </div>
+                
+                 {/* Hình ảnh Sản phẩm */}
                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Hình ảnh Sản phẩm</label>
                     <div className="flex items-center justify-center w-full">
@@ -246,7 +299,6 @@ export default function AddProductPage() { // SỬ DỤNG CÚ PHÁP FUNCTION CHO
                             <div className="flex flex-col items-center justify-center pt-5 pb-6">
                                 {/* Hiển thị trạng thái preview/đã chọn */}
                                 {productImageUrl && !productImage ? (
-                                     // Trường hợp ảnh đã được lưu và có URL công khai (dùng cho edit)
                                     <div className="text-center text-green-600">
                                         <CheckCircle className="h-6 w-6 mx-auto mb-2" />
                                         <p className="text-xs">Ảnh đã được upload và lưu trữ.</p>
@@ -286,7 +338,7 @@ export default function AddProductPage() { // SỬ DỤNG CÚ PHÁP FUNCTION CHO
 
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || categories.length === 0} // Thêm điều kiện disable nếu không có danh mục
           className="w-full py-3 px-4 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-200 disabled:opacity-50 disabled:bg-indigo-400 flex items-center justify-center"
         >
           {isSubmitting ? (
@@ -299,6 +351,9 @@ export default function AddProductPage() { // SỬ DỤNG CÚ PHÁP FUNCTION CHO
             </>
           )}
         </button>
+        {categories.length === 0 && (
+             <p className="text-sm text-red-500 text-center">**Vui lòng tạo ít nhất một Danh mục trước khi thêm sản phẩm.**</p>
+        )}
       </form>
     </div>
   );

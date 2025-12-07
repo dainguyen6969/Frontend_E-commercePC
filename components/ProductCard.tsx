@@ -31,9 +31,12 @@ export default function ProductCard({ product }: { product: SanPham }) {
   // Áp dụng chuẩn hóa URL ảnh từ Backend
   const imageUrl = normalizeImageUrl(product.anh || "https://placehold.co/400x300/F0F4FF/1E40AF?text=No+Image");
 
+  // ĐƯỜNG DẪN CHI TIẾT SẢN PHẨM MỚI
+  const detailPath = `/products/${product.id}`;
 
   // Xử lý khi nhấn nút Thêm vào giỏ hàng
   const handleAddToCart = (e: React.MouseEvent<HTMLButtonElement>) => {
+    // Ngăn chặn sự kiện click này lan truyền lên thẻ Link bọc bên ngoài
     e.preventDefault(); 
     e.stopPropagation(); 
 
@@ -47,6 +50,7 @@ export default function ProductCard({ product }: { product: SanPham }) {
     } else {
         // Đã đăng nhập, thực hiện logic thêm vào giỏ hàng (mock)
         console.log(`Đã đăng nhập. Thêm sản phẩm ${product.ten} vào giỏ hàng.`);
+        // Thực hiện thêm vào giỏ hàng API ở đây
     }
   };
 
@@ -55,7 +59,8 @@ export default function ProductCard({ product }: { product: SanPham }) {
       
       {/* Product Image Wrapper */}
       <div className="relative h-48 w-full overflow-hidden bg-gray-50 flex items-center justify-center p-4">
-        <Link href={`/products/${product.id}`} className="w-full h-full relative">
+        {/* LINK BỌC HÌNH ẢNH */}
+        <Link href={detailPath} className="w-full h-full relative"> 
             <Image
             src={imageUrl} // <-- SỬ DỤNG URL ĐÃ CHUẨN HÓA
             alt={product.ten}
@@ -88,8 +93,8 @@ export default function ProductCard({ product }: { product: SanPham }) {
         {/* Category (Optional Mock) */}
         <span className="text-xs text-gray-400 font-medium uppercase mb-1">TechZone</span>
 
-        {/* Product Name */}
-        <Link href={`/products/${product.id}`} className="block flex-grow">
+        {/* Product Name - LINK BỌC TÊN SẢN PHẨM */}
+        <Link href={detailPath} className="block flex-grow"> 
             <h3 className="text-sm font-bold text-gray-800 leading-snug hover:text-indigo-600 transition line-clamp-2 min-h-[40px]" title={product.ten}>
                 {product.ten}
             </h3>

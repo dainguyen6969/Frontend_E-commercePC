@@ -2,10 +2,15 @@ export interface SanPham {
   id: number;
   ten: string;
   gia: number;
-  anh: string; // Tên trường ảnh từ Backend (SanPham.java)
-  // Bạn có thể thêm các trường khác nếu cần thiết (ví dụ: moTa, danhMuc, ...)
+  anh: string; 
+  
+  // Các trường chi tiết ĐÃ GỘP vào SanPham
   moTa?: string; 
-  danhMucId?: any; // Tùy thuộc vào cấu trúc của DanhMuc
+  // Đã bỏ: thuocTinh, giaTri
+  soLuong?: number; 
+  danhMucId?: any; 
+  danhMucTen?: string; 
+  
   createdAt?: string;
   updatedAt?: string;
 }
@@ -15,4 +20,15 @@ export interface ApiResponse<T> {
   code: number;
   message: string | null;
   result: T;
+}
+
+// DTO cho request tạo sản phẩm (đồng bộ với SanPhamRequest.java)
+export interface SanPhamRequest {
+    ten: string;
+    gia: number;
+    anh: string;
+    danhMucId: number;
+    moTa: string;
+    // Đã bỏ: thuocTinh, giaTri
+    soLuong: number;
 }
