@@ -51,11 +51,12 @@ export function useAuth(): AuthState {
           });
         } else {
           // Token không hợp lệ, xóa token cũ
+          console.warn("Token validation failed or token is expired. Removing token."); // Cảnh báo rõ ràng hơn
           localStorage.removeItem('auth_token');
           setState({ isLoggedIn: false, isAdmin: false, userRole: null, isLoading: false });
         }
       } catch (error) {
-        console.error("Authentication check failed:", error);
+        console.error("Authentication check failed (Backend Introspect API failure):", error);
         localStorage.removeItem('auth_token');
         setState({ isLoggedIn: false, isAdmin: false, userRole: null, isLoading: false });
       }

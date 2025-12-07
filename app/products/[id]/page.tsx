@@ -3,10 +3,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { useRouter, useParams } from 'next/navigation';
-import { apiService } from '@/services/api'; // Import apiService
-import { SanPham } from '@/types/Product'; // Import SanPham interface
+import { apiService } from '@/services/api'; 
+import { SanPham, CartItemRequest } from '@/types/Product'; // Import CartItemRequest
 import { ShoppingCart, Star, Plus, Minus, Package, Loader2, Info } from 'lucide-react';
-import ProductCard from '@/components/ProductCard'; // Sử dụng lại ProductCard
+import ProductCard from '@/components/ProductCard'; 
 
 // URL cơ sở của Backend 
 const BACKEND_BASE_URL = "http://localhost:8080/trongdai"; 
@@ -23,7 +23,6 @@ const getOldPrice = (currentPrice: number) => Math.floor(currentPrice / 0.85);
 const ProductDetailPage: React.FC = () => {
     const params = useParams();
     const router = useRouter();
-    // Lấy ID từ tham số URL ([id])
     const productId = Array.isArray(params.id) ? params.id[0] : params.id;
     const numericProductId = parseInt(productId as string);
 
@@ -49,7 +48,6 @@ const ProductDetailPage: React.FC = () => {
 
             // 2. Lấy sản phẩm liên quan (nếu có danh mục)
             if (fetchedProduct.danhMucId) {
-                // Đảm bảo lấy ID danh mục nếu danhMucId là một object
                 const danhMucId = fetchedProduct.danhMucId.id || fetchedProduct.danhMucId;
                 const related = await apiService.getRelatedProducts(danhMucId, numericProductId);
                 setRelatedProducts(related);
@@ -76,8 +74,10 @@ const ProductDetailPage: React.FC = () => {
         });
     };
 
-    // --- Logic Thêm vào Giỏ hàng ---
-    const handleAddToCart = () => {
+    // --- Logic Thêm vào Giỏ hàng (Cập nhật thành API thật) ---
+    const handleAddToCart = async () => {
+        if (!product) return; 
+        
         const token = localStorage.getItem('auth_token');
         if (!token) {
             setMessage({ type: 'error', text: 'Vui lòng đăng nhập để thêm sản phẩm vào giỏ hàng.' });
@@ -85,14 +85,40 @@ const ProductDetailPage: React.FC = () => {
             return;
         }
 
-        if (!product || quantity > (product.soLuong || 0)) {
+        if (quantity > (product.soLuong || 0)) {
              setMessage({ type: 'error', text: 'Số lượng yêu cầu vượt quá tồn kho.' });
              return;
         }
         
-        // Mock: Thực hiện API thêm vào giỏ hàng thực tế ở đây
-        console.log(`[Cart] Thêm ${quantity} x ${product.ten} (ID: ${product.id})`);
-        setMessage({ type: 'success', text: `Đã thêm ${quantity} x ${product.ten} vào giỏ hàng.` });
+        // --- THỰC HIỆN API THÊM GIỎ HÀNG THẬT ---
+        setMessage({ type: 'success', text: 'Đang thêm sản phẩm vào giỏ hàng...' });
+
+        try {
+            const request: CartItemRequest = {
+                productId: product.id,
+                quantity: quantity
+            };
+            
+            // Gọi API addToCart (POST /cart/items)
+            const updatedCart = await apiService.addToCart(request);
+
+            setMessage({ 
+                type: 'success', 
+                text: `Đã thêm ${quantity} x ${product.ten} vào giỏ hàng thành công!` 
+            });
+            
+            console.log("Giỏ hàng hiện tại:", updatedCart);
+
+        } catch (error: any) {
+            console.error("Lỗi khi thêm vào giỏ hàng:", error);
+            // FIX: Đảm bảo hiển thị thông báo lỗi chi tiết từ Backend/Axios
+            const errorMsg = error.message || 'Thêm vào giỏ hàng thất bại. Vui lòng kiểm tra Server.';
+            setMessage({ 
+                type: 'error', 
+                text: errorMsg
+            });
+        }
+        
         setTimeout(() => setMessage(null), 3000);
     };
 

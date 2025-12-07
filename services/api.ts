@@ -1,15 +1,20 @@
 import axios from "axios";
-// Sửa import để sử dụng SanPham, ApiResponse, SanPhamRequest từ types/Product
-import { SanPham, ApiResponse, SanPhamRequest } from "@/types/Product"; 
+import { 
+    SanPham, 
+    ApiResponse, 
+    SanPhamRequest, 
+    GioHangResponse, 
+    CartItemRequest, 
+    OrderCreationRequest, 
+    OrderResponse,
+    UserResponse, // Import UserResponse
+    UserUpdateRequest // Import UserUpdateRequest
+} from "@/types/Product"; 
 
 // --- INTERFACES CHUNG ---
-
 interface ProfileResponse { isValid: boolean; roles: string[]; }
 export interface Category { id: number; ten: string; moTa: string; }
 interface CategoryRequest { ten: string; moTa: string; }
-
-// **LƯU Ý QUAN TRỌNG:** // Loại bỏ ProductCreationRequest cũ và sử dụng SanPhamRequest đã được import từ types/Product.ts
-// interface ProductCreationRequest { ... } <-- Bỏ qua
 
 const API_BASE_URL = 'http://localhost:8080/trongdai';
 
@@ -163,7 +168,6 @@ export const apiService = {
     }
   },
 
-  // *** THÊM HÀM MỚI: Lấy chi tiết sản phẩm theo ID ***
   getProductById: async (productId: number): Promise<SanPham | null> => {
     try {
         const response = await axios.get<ApiResponse<SanPham>>(`${API_BASE_URL}/products/${productId}`);
@@ -178,7 +182,6 @@ export const apiService = {
     }
   },
 
-  // *** THÊM HÀM MỚI: Lấy sản phẩm liên quan ***
   getRelatedProducts: async (danhMucId: number, excludedProductId: number): Promise<SanPham[]> => {
     try {
         const response = await axios.get<ApiResponse<SanPham[]>>(`${API_BASE_URL}/products/related/${danhMucId}/${excludedProductId}`);
@@ -207,4 +210,149 @@ export const apiService = {
         throw new Error("Network or unexpected error occurred during product deletion.");
     }
   },
+  
+  // *** USER PROFILE METHODS ***
+  
+    getMyProfile: async (): Promise<UserResponse | null> => {
+        const token = localStorage.getItem('auth_token');
+        if (!token) { return null; }
+
+        try {
+            const response = await axios.get<ApiResponse<UserResponse>>(`${API_BASE_URL}/users/my-profile`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.data.code === 1000 && response.data.result) { return response.data.result; }
+            return null;
+        } catch (error) {
+            console.error("Error fetching user profile:", error);
+            return null;
+        }
+    },
+    
+    updateMyProfile: async (request: UserUpdateRequest): Promise<UserResponse> => {
+        const token = localStorage.getItem('auth_token');
+        if (!token) { throw new Error("Unauthorized: Missing authentication token."); }
+
+        try {
+            const response = await axios.put<ApiResponse<UserResponse>>(`${API_BASE_URL}/users/my-profile`, request, {
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+            if (response.data.code === 1000 && response.data.result) { return response.data.result; }
+            throw new Error(response.data.message || "Failed to update profile.");
+        } catch (error) {
+            const msg = (axios.isAxiosError(error) && error.response?.data?.message) || "Lỗi cập nhật hồ sơ.";
+            throw new Error(msg);
+        }
+    },
+    
+    addAddress: async (request: any): Promise<UserResponse> => { // Sử dụng any cho request address để đơn giản
+        const token = localStorage.getItem('auth_token');
+        if (!token) { throw new Error("Unauthorized: Missing authentication token."); }
+
+        try {
+            const response = await axios.post<ApiResponse<UserResponse>>(`${API_BASE_URL}/users/addresses`, request, {
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+            if (response.data.code === 1000 && response.data.result) { return response.data.result; }
+            throw new Error(response.data.message || "Failed to add address.");
+        } catch (error) {
+            const msg = (axios.isAxiosError(error) && error.response?.data?.message) || "Lỗi thêm địa chỉ.";
+            throw new Error(msg);
+        }
+    },
+    
+    deleteAddress: async (diaChiId: number): Promise<UserResponse> => {
+        const token = localStorage.getItem('auth_token');
+        if (!token) { throw new Error("Unauthorized: Missing authentication token."); }
+
+        try {
+            const response = await axios.delete<ApiResponse<UserResponse>>(`${API_BASE_URL}/users/addresses/${diaChiId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.data.code === 1000 && response.data.result) { return response.data.result; }
+            throw new Error(response.data.message || "Failed to delete address.");
+        } catch (error) {
+            const msg = (axios.isAxiosError(error) && error.response?.data?.message) || "Lỗi xóa địa chỉ.";
+            throw new Error(msg);
+        }
+    },
+    
+  // *** HÀM CART/ORDER KHÁC (Giữ nguyên) ***
+  getCart: async (): Promise<GioHangResponse | null> => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) { return null; }
+
+    try {
+        const response = await axios.get<ApiResponse<GioHangResponse>>(`${API_BASE_URL}/cart`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.data.code === 1000 && response.data.result) { return response.data.result; }
+        return null;
+    } catch (error) {
+        console.error("Error fetching cart:", error);
+        return null;
+    }
+  },
+
+  addToCart: async (request: CartItemRequest): Promise<GioHangResponse> => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) { throw new Error("Unauthorized: Missing authentication token."); }
+
+    try {
+        const response = await axios.post<ApiResponse<GioHangResponse>>(`${API_BASE_URL}/cart/items`, request, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+        });
+        if (response.data.code === 1000 && response.data.result) { return response.data.result; }
+        throw new Error(response.data.message || "Failed to add/update cart.");
+    } catch (error) {
+        const msg = (axios.isAxiosError(error) && error.response?.data?.message) || "Lỗi mạng hoặc Backend";
+        throw new Error(msg);
+    }
+  },
+  
+  removeCartItem: async (itemId: number): Promise<void> => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) { throw new Error("Unauthorized: Missing authentication token."); }
+
+    try {
+        await axios.delete(`${API_BASE_URL}/cart/items/${itemId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+    } catch (error) {
+        const msg = (axios.isAxiosError(error) && error.response?.data?.message) || "Xóa mặt hàng thất bại";
+        throw new Error(msg);
+    }
+  },
+
+  createOrder: async (request: OrderCreationRequest): Promise<OrderResponse> => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) { throw new Error("Unauthorized: Missing authentication token."); }
+
+    try {
+        const response = await axios.post<ApiResponse<OrderResponse>>(`${API_BASE_URL}/orders`, request, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+        });
+        if (response.data.code === 1000 && response.data.result) { return response.data.result; }
+        throw new Error(response.data.message || "Failed to create order.");
+    } catch (error) {
+        const msg = (axios.isAxiosError(error) && error.response?.data?.message) || "Lỗi mạng hoặc giỏ hàng trống.";
+        throw new Error(msg);
+    }
+  },
+
+  getOrderHistory: async (): Promise<OrderResponse[]> => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) { return []; }
+
+    try {
+        const response = await axios.get<ApiResponse<OrderResponse[]>>(`${API_BASE_URL}/orders`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.data.code === 1000 && Array.isArray(response.data.result)) { return response.data.result; }
+        return [];
+    } catch (error) {
+        console.error("Error fetching order history:", error);
+        return [];
+    }
+  }
 };

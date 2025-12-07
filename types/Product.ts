@@ -4,9 +4,7 @@ export interface SanPham {
   gia: number;
   anh: string; 
   
-  // Các trường chi tiết ĐÃ GỘP vào SanPham
   moTa?: string; 
-  // Đã bỏ: thuocTinh, giaTri
   soLuong?: number; 
   danhMucId?: any; 
   danhMucTen?: string; 
@@ -22,13 +20,74 @@ export interface ApiResponse<T> {
   result: T;
 }
 
-// DTO cho request tạo sản phẩm (đồng bộ với SanPhamRequest.java)
+// DTO cho request tạo sản phẩm
 export interface SanPhamRequest {
     ten: string;
     gia: number;
     anh: string;
     danhMucId: number;
     moTa: string;
-    // Đã bỏ: thuocTinh, giaTri
     soLuong: number;
+}
+
+// --- USER INTERFACES ---
+
+export interface DiaChi { // Export DiaChi
+    id: number;
+    thanhPho: string;
+    xaPhuong: string;
+    diaChiHienTai: string;
+    phone: string; // Thêm phone theo Entity Java mới
+}
+
+export interface UserResponse { // Export UserResponse
+    id: number;
+    username: string;
+    email: string;
+    fullName: string;
+    phone: string;
+    status: boolean;
+    diaChi: DiaChi[]; // List of addresses
+}
+
+export interface UserUpdateRequest { // Export UserUpdateRequest
+    email: string;
+    fullName: string;
+    phone: string;
+}
+
+
+// --- CART & ORDER INTERFACES ---
+export interface CartItemRequest {
+    productId: number;
+    quantity: number; 
+}
+
+export interface CartItemResponse {
+    chiTietGioHangId: number; 
+    sanPhamId: number;
+    tenSanPham: string;
+    anhSanPham: string;
+    soLuong: number;
+    giaHienTai: number;
+    thanhTien: number;
+}
+
+export interface GioHangResponse {
+    gioHangId: number;
+    items: CartItemResponse[];
+    tongTienGioHang: number;
+    tongSoLuong: number;
+}
+
+export interface OrderCreationRequest {
+    diaChiNhanHang: string; 
+    phuongThucThanhToan: string; 
+}
+
+export interface OrderResponse {
+    id: number;
+    tongTien: number;
+    status: string;
+    createdAt: string;
 }
