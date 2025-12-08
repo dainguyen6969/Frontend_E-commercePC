@@ -40,6 +40,9 @@ export interface DiaChi { // Export DiaChi
     phone: string; // Thêm phone theo Entity Java mới
 }
 
+// Định nghĩa DiaChiResponse để tương thích với API Service
+export interface DiaChiResponse extends DiaChi {} 
+
 export interface UserResponse { // Export UserResponse
     id: number;
     username: string;
@@ -47,7 +50,7 @@ export interface UserResponse { // Export UserResponse
     fullName: string;
     phone: string;
     status: boolean;
-    diaChi: DiaChi[]; // List of addresses
+    diaChi: DiaChi[]; // List of addresses (nhúng trong hồ sơ chính)
 }
 
 export interface UserUpdateRequest { // Export UserUpdateRequest
@@ -79,6 +82,31 @@ export interface GioHangResponse {
     tongTienGioHang: number;
     tongSoLuong: number;
 }
+
+// Interface cho chi tiết một mặt hàng trong đơn hàng
+export interface OrderItemResponse { 
+    chiTietDonHangId: number; 
+    sanPhamId: number;
+    tenSanPham: string;
+    anhSanPham: string;
+    soLuong: number;
+    giaMua: number; // Giá tại thời điểm mua
+    thanhTien: number;
+}
+
+// Interface cho toàn bộ chi tiết đơn hàng
+export interface OrderDetailResponse {
+    id: number;
+    tongTien: number;
+    status: string;
+    createdAt: string;
+    
+    diaChiNhanHang: string;
+    phuongThucThanhToan: string;
+    
+    items: OrderItemResponse[];
+}
+
 
 export interface OrderCreationRequest {
     diaChiNhanHang: string; 

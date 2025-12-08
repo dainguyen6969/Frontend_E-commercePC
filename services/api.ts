@@ -7,8 +7,10 @@ import {
     CartItemRequest, 
     OrderCreationRequest, 
     OrderResponse,
-    UserResponse, // Import UserResponse
-    UserUpdateRequest // Import UserUpdateRequest
+    UserResponse, 
+    UserUpdateRequest, 
+    DiaChiResponse, // <-- Đã được import
+    OrderDetailResponse // <-- Đã được import
 } from "@/types/Product"; 
 
 // --- INTERFACES CHUNG ---
@@ -245,6 +247,34 @@ export const apiService = {
         }
     },
     
+    // --- PHƯƠNG THỨC LẤY TẤT CẢ ĐỊA CHỈ (Đã sửa lỗi is not a function) ---
+    getAllAddresses: async (): Promise<DiaChiResponse[]> => {
+        const token = localStorage.getItem('auth_token');
+        if (!token) { return []; }
+
+        try {
+            // Gọi endpoint GET /users/addresses
+            const response = await axios.get<ApiResponse<DiaChiResponse[]>>(`${API_BASE_URL}/users/addresses`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (response.data.code === 1000 && Array.isArray(response.data.result)) { 
+                return response.data.result; 
+            }
+            return [];
+        } catch (error) {
+            // Logging lỗi chi tiết 500 (Đã được bạn cung cấp)
+            console.error("Error fetching user addresses:", error);
+            // Xử lý lỗi Axios để trả về thông báo rõ ràng hơn
+            if (axios.isAxiosError(error) && error.response) {
+                const msg = error.response.data?.message || `Lỗi server: ${error.response.statusText}`;
+                 // Quan trọng: Phải ném lỗi để Frontend bắt được và hiển thị message
+                throw new Error(msg); 
+            }
+            return [];
+        }
+    },
+    
     addAddress: async (request: any): Promise<UserResponse> => { // Sử dụng any cho request address để đơn giản
         const token = localStorage.getItem('auth_token');
         if (!token) { throw new Error("Unauthorized: Missing authentication token."); }
@@ -277,6 +307,32 @@ export const apiService = {
         }
     },
     
+    // --- PHƯƠNG THỨC LẤY CHI TIẾT ĐƠN HÀNG ---
+    getOrderDetail: async (orderId: number): Promise<OrderDetailResponse | null> => {
+        const token = localStorage.getItem('auth_token');
+        if (!token) { return null; }
+
+        // Endpoint giả định: /orders/{orderId}
+        try {
+            const response = await axios.get<ApiResponse<OrderDetailResponse>>(`${API_BASE_URL}/orders/${orderId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (response.data.code === 1000 && response.data.result) { 
+                return response.data.result; 
+            }
+            return null;
+        } catch (error) {
+            console.error(`Error fetching order detail ID ${orderId}:`, error);
+            // Ném lỗi cụ thể cho Frontend xử lý hiển thị thông báo
+            if (axios.isAxiosError(error) && error.response) {
+                 const msg = error.response.data?.message || `Lỗi server: ${error.response.statusText}`;
+                 throw new Error(msg);
+            }
+            return null;
+        }
+    },
+    
   // *** HÀM CART/ORDER KHÁC (Giữ nguyên) ***
   getCart: async (): Promise<GioHangResponse | null> => {
     const token = localStorage.getItem('auth_token');
@@ -287,10 +343,10 @@ export const apiService = {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (response.data.code === 1000 && response.data.result) { return response.data.result; }
-        return null;
+        throw new Error(response.data.message || "Failed to fetch cart.");
     } catch (error) {
-        console.error("Error fetching cart:", error);
-        return null;
+        const msg = (axios.isAxiosError(error) && error.response?.data?.message) || "Lỗi mạng hoặc Backend";
+        throw new Error(msg);
     }
   },
 

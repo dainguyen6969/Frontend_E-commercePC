@@ -21,6 +21,9 @@ const UserProfilePage: React.FC = () => {
     const { isLoggedIn, isLoading: loadingAuth } = useAuth();
     
     const [userProfile, setUserProfile] = useState<UserResponse | null>(null);
+    // THÊM STATE RIÊNG cho danh sách địa chỉ (dùng API mới)
+    const [userAddresses, setUserAddresses] = useState<DiaChi[]>([]); 
+    
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
@@ -40,19 +43,41 @@ const UserProfilePage: React.FC = () => {
         diaChiHienTai: '',
         phone: '',
     });
+
+    // --- Helper function: Fetch riêng danh sách Địa chỉ ---
+    const fetchAddresses = useCallback(async () => {
+        try {
+            // SỬ DỤNG API MỚI: GET /users/addresses
+            const addresses = await apiService.getAllAddresses();
+            setUserAddresses(addresses);
+        } catch (error) {
+            console.error("Error fetching addresses:", error);
+            // Dù lỗi, vẫn đặt rỗng để tránh lỗi render
+            setUserAddresses([]); 
+        }
+    }, []);
     
-    // --- Fetch User Profile ---
+    // --- Fetch User Profile (Tách biệt) ---
     const fetchProfile = useCallback(async () => {
         setLoading(true);
         try {
             const profile = await apiService.getMyProfile();
             if (profile) {
-                setUserProfile(profile);
+                // Chỉ lưu thông tin profile (bỏ qua diaChi nhúng trong response)
+                const profileWithoutAddresses: UserResponse = {
+                    ...profile,
+                    // Đặt rỗng vì chúng ta sẽ dùng state userAddresses riêng
+                    diaChi: [] 
+                };
+                setUserProfile(profileWithoutAddresses);
                 setFormData({
                     email: profile.email || '',
                     fullName: profile.fullName || '',
-                    phone: profile.phone || '',
+                    phone: profile.phone || '', 
                 });
+                
+                // GỌI API LẤY ĐỊA CHỈ RIÊNG (Đã kích hoạt)
+                await fetchAddresses(); 
             } else {
                 router.push('/auth?redirect=/profile');
             }
@@ -62,7 +87,7 @@ const UserProfilePage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [router]);
+    }, [router, fetchAddresses]);
 
     useEffect(() => {
         if (!loadingAuth) {
@@ -74,13 +99,13 @@ const UserProfilePage: React.FC = () => {
         }
     }, [loadingAuth, isLoggedIn, router, fetchProfile]);
 
-    // FIX: Sửa lỗi Implicit Any cho form chính
+    // --- Cập nhật Hồ sơ Chính ---
     const handleFormChange = (e: ChangeEvent<HTMLInputElement>) => {
         const { id, value } = e.target;
-        setFormData((prev: UserUpdateRequest) => ({ ...prev, [id]: value }));
+        const fieldName = id as keyof UserUpdateRequest;
+        setFormData((prev) => ({ ...prev, [fieldName]: value }));
     };
 
-    // --- Cập nhật Hồ sơ Chính ---
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
@@ -93,8 +118,21 @@ const UserProfilePage: React.FC = () => {
 
             const updatedProfile = await apiService.updateMyProfile(formData);
             
-            setUserProfile(updatedProfile); 
+            // Cập nhật profile (vẫn loại bỏ diaChi)
+            const profileWithoutAddresses: UserResponse = {
+                ...updatedProfile,
+                diaChi: [] 
+            };
+            setUserProfile(profileWithoutAddresses); 
+            setFormData({
+                email: updatedProfile.email || '',
+                fullName: updatedProfile.fullName || '',
+                phone: updatedProfile.phone || '',
+            });
             setMessage({ type: 'success', text: 'Cập nhật hồ sơ thành công!' });
+
+            // FIX: Đảm bảo địa chỉ được làm mới sau khi cập nhật hồ sơ
+            await fetchAddresses();
 
         } catch (error: any) {
              setMessage({ type: 'error', text: error.message || 'Cập nhật hồ sơ thất bại.' });
@@ -102,6 +140,7 @@ const UserProfilePage: React.FC = () => {
             setIsSubmitting(false);
         }
     };
+    
     
     // --- Xử lý Thêm Địa chỉ ---
     const handleAddAddress = async (e: FormEvent) => {
@@ -114,10 +153,12 @@ const UserProfilePage: React.FC = () => {
                  throw new Error("Vui lòng điền đầy đủ thông tin địa chỉ.");
             }
 
-            const updatedProfile = await apiService.addAddress(newAddress); 
+            // Gọi API thêm địa chỉ (vẫn trả về UserResponse theo Backend hiện tại)
+            await apiService.addAddress(newAddress); 
             
-            // FIX: Cập nhật state userProfile với response mới
-            setUserProfile(updatedProfile); 
+            // THAO TÁC CẬP NHẬT: Gọi lại API lấy địa chỉ riêng để đồng bộ UI
+            await fetchAddresses(); 
+
             setMessage({ type: 'success', text: 'Thêm địa chỉ mới thành công!' });
             setIsAddressModalOpen(false);
             setNewAddress({ thanhPho: '', xaPhuong: '', diaChiHienTai: '', phone: '' });
@@ -136,10 +177,12 @@ const UserProfilePage: React.FC = () => {
         setIsSubmitting(true);
         setMessage(null);
         try {
-            const updatedProfile = await apiService.deleteAddress(id); 
+            // Gọi API xóa địa chỉ
+            await apiService.deleteAddress(id); 
             
-            // FIX: Cập nhật state userProfile với response mới
-            setUserProfile(updatedProfile); 
+            // THAO TÁC CẬP NHẬT: Gọi lại API lấy địa chỉ riêng để đồng bộ UI
+            await fetchAddresses(); 
+            
             setMessage({ type: 'success', text: 'Đã xóa địa chỉ thành công.' });
 
         } catch (error: any) {
@@ -149,18 +192,13 @@ const UserProfilePage: React.FC = () => {
         }
     };
 
-    // FIX: Hàm xử lý thay đổi input trong Modal (Sửa lỗi chỉ nhập 1 ký tự)
-    const handleAddressChange = (e: ChangeEvent<HTMLInputElement>) => {
-        const { id, value } = e.target;
-        
-        setNewAddress((prev: AddressForm) => { 
-            // Ánh xạ id của input (modal-thanhPho) sang tên field (thanhPho)
-            const fieldName = id.replace('modal-', '') as keyof AddressForm;
-            if (fieldName in prev) {
-                 return { ...prev, [fieldName]: value };
-            }
-            return prev;
-        });
+    // --- FIX LỖI NHẬP LIỆU: Hàm xử lý thay đổi input trong Modal (Sử dụng currying function) ---
+    const handleAddressChange = (fieldName: keyof AddressForm) => (e: ChangeEvent<HTMLInputElement>) => {
+        const { value } = e.target;
+        setNewAddress((prev) => ({ 
+            ...prev, 
+            [fieldName]: value 
+        }));
     }
 
 
@@ -180,7 +218,7 @@ const UserProfilePage: React.FC = () => {
                             id="modal-phone"
                             type="tel"
                             value={newAddress.phone}
-                            onChange={handleAddressChange} // Dùng hàm đã FIX
+                            onChange={handleAddressChange('phone')} 
                             className="w-full p-3 border border-gray-300 rounded-lg"
                             required
                             disabled={isSubmitting}
@@ -194,7 +232,7 @@ const UserProfilePage: React.FC = () => {
                             id="modal-thanhPho" 
                             type="text"
                             value={newAddress.thanhPho}
-                            onChange={handleAddressChange} // Dùng hàm đã FIX
+                            onChange={handleAddressChange('thanhPho')} 
                             className="w-full p-3 border border-gray-300 rounded-lg"
                             required
                             disabled={isSubmitting}
@@ -208,20 +246,20 @@ const UserProfilePage: React.FC = () => {
                             id="modal-xaPhuong" 
                             type="text"
                             value={newAddress.xaPhuong}
-                            onChange={handleAddressChange} // Dùng hàm đã FIX
+                            onChange={handleAddressChange('xaPhuong')} 
                             className="w-full p-3 border border-gray-300 rounded-lg"
                             disabled={isSubmitting}
                         />
                     </div>
 
-                    {/* Địa chỉ hiện tại */}
+                    {/* Địa chỉ cụ thể */}
                     <div>
                         <label htmlFor="modal-diaChiHienTai" className="block text-sm font-medium text-gray-700">Địa chỉ cụ thể (Số nhà, Tên đường)</label>
                         <input
                             id="modal-diaChiHienTai" 
                             type="text"
                             value={newAddress.diaChiHienTai}
-                            onChange={handleAddressChange} // Dùng hàm đã FIX
+                            onChange={handleAddressChange('diaChiHienTai')} 
                             className="w-full p-3 border border-gray-300 rounded-lg"
                             required
                             disabled={isSubmitting}
@@ -267,6 +305,9 @@ const UserProfilePage: React.FC = () => {
     if (!isLoggedIn || !userProfile) {
         return null; 
     }
+
+    // LẤY TỪ STATE MỚI
+    const addressesToDisplay = userAddresses; 
 
     return (
         <div className="container mx-auto p-4 lg:p-8 max-w-5xl">
@@ -377,12 +418,15 @@ const UserProfilePage: React.FC = () => {
                         <MapPin className="h-5 w-5 mr-2" /> Quản lý Địa chỉ
                     </h2>
                     
-                    {userProfile.diaChi && userProfile.diaChi.length > 0 ? (
-                        userProfile.diaChi.map((diaChi) => (
+                    {addressesToDisplay.length > 0 ? (
+                        addressesToDisplay.map((diaChi) => (
                             <div key={diaChi.id} className="p-3 border rounded-lg bg-gray-50 flex justify-between items-start">
                                 <div className="text-sm">
                                     <p className="font-medium text-gray-800">{diaChi.diaChiHienTai}</p>
-                                    <p className="text-gray-600 text-xs">{diaChi.xaPhuong ? `${diaChi.xaPhuong}, ` : ''}{diaChi.thanhPho}</p>
+                                    <p className="text-gray-600 text-xs">
+                                        {/* Hiển thị địa chỉ chi tiết */}
+                                        {diaChi.xaPhuong ? `${diaChi.xaPhuong}, ` : ''}{diaChi.thanhPho}
+                                    </p>
                                     <p className="text-gray-600 text-xs">SĐT: {diaChi.phone}</p>
                                 </div>
                                 <button 

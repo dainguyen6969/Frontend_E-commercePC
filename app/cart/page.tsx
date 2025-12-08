@@ -1,8 +1,15 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, ChangeEvent } from 'react'; // THÊM ChangeEvent
 import { apiService } from '@/services/api';
-import { GioHangResponse, CartItemResponse, CartItemRequest, OrderCreationRequest, OrderResponse } from '@/types/Product';
+import { 
+    GioHangResponse, 
+    CartItemResponse, 
+    CartItemRequest, 
+    OrderCreationRequest, 
+    OrderResponse,
+    DiaChi // Import DiaChi/DiaChiResponse
+} from '@/types/Product';
 import { Loader2, ShoppingCart, Trash2, Plus, Minus, XCircle, CheckCircle } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -16,7 +23,6 @@ const normalizeImageUrl = (path: string) => {
     return path || "https://placehold.co/100x100/F0F4FF/1E40AF?text=No+Image"; 
 }
 
-const DEFAULT_SHIPPING_ADDRESS = "Số 1, Đại lộ Thống Nhất, TP.HCM";
 const DEFAULT_PAYMENT_METHOD = "COD"; 
 
 // Đảm bảo đây là một functional component
@@ -27,6 +33,44 @@ const CartPage: React.FC = () => {
     const [isUpdating, setIsUpdating] = useState(false);
     const [isOrdering, setIsOrdering] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    
+    // --- STATE MỚI CHO ĐỊA CHỈ ---
+    const [addresses, setAddresses] = useState<DiaChi[]>([]);
+    const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
+    const [isAddressLoading, setIsAddressLoading] = useState(true);
+
+    // --- Helper: Hàm format địa chỉ (dùng để gửi lên Backend) ---
+    const formatAddress = (addr: DiaChi) => {
+        const parts = [addr.diaChiHienTai];
+        if (addr.xaPhuong) parts.push(addr.xaPhuong);
+        if (addr.thanhPho) parts.push(addr.thanhPho);
+        parts.push(`SĐT: ${addr.phone}`);
+        return parts.join(', ');
+    };
+
+    // --- Fetch Address Data ---
+    const fetchAddresses = useCallback(async () => {
+        setIsAddressLoading(true);
+        try {
+            // SỬ DỤNG API getAllAddresses TỪ Profile API
+            const fetchedAddresses = await apiService.getAllAddresses();
+            setAddresses(fetchedAddresses);
+            
+            // Đặt địa chỉ đầu tiên làm mặc định nếu có
+            if (fetchedAddresses.length > 0) {
+                setSelectedAddressId(fetchedAddresses[0].id);
+            } else {
+                 setSelectedAddressId(null);
+            }
+
+        } catch (error) {
+            console.error("Error fetching addresses:", error);
+            setMessage({ type: 'error', text: 'Lỗi khi tải địa chỉ đã lưu.' });
+            setAddresses([]);
+        } finally {
+            setIsAddressLoading(false);
+        }
+    }, []);
 
     // --- Fetch Cart Data ---
     const fetchCart = useCallback(async () => {
@@ -34,11 +78,15 @@ const CartPage: React.FC = () => {
         try {
             const token = localStorage.getItem('auth_token');
             if (!token) {
-                // Nếu chưa đăng nhập, chuyển hướng
                 router.push('/auth?redirect=/cart');
                 return;
             }
-            const fetchedCart = await apiService.getCart();
+            // Load Cart và Địa chỉ song song
+            const [fetchedCart] = await Promise.all([
+                apiService.getCart(), 
+                fetchAddresses()
+            ]);
+            
             setCart(fetchedCart);
         } catch (error) {
             console.error("Error fetching cart:", error);
@@ -46,11 +94,17 @@ const CartPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [router]);
+    }, [router, fetchAddresses]);
 
     useEffect(() => {
         fetchCart();
     }, [fetchCart]);
+
+    // --- Lấy đối tượng địa chỉ đã chọn ---
+    const selectedAddress = useMemo(() => {
+        return addresses.find(addr => addr.id === selectedAddressId);
+    }, [addresses, selectedAddressId]);
+
 
     // --- Cập nhật số lượng item (Thêm/giảm hoặc thay thế) ---
     const updateItemQuantity = useCallback(async (item: CartItemResponse, newQuantity: number) => {
@@ -102,13 +156,21 @@ const CartPage: React.FC = () => {
             setMessage({ type: 'error', text: 'Giỏ hàng trống, không thể đặt hàng.' });
             return;
         }
-
+        if (!selectedAddress) {
+            setMessage({ type: 'error', text: 'Vui lòng chọn hoặc thêm địa chỉ nhận hàng.' });
+            return;
+        }
+        
         setIsOrdering(true);
         setMessage(null);
+        
         try {
+            // SỬ DỤNG ĐỊA CHỈ ĐÃ CHỌN ĐỂ GỬI LÊN BACKEND
+            const addressString = formatAddress(selectedAddress);
+            
             const request: OrderCreationRequest = {
-                diaChiNhanHang: DEFAULT_SHIPPING_ADDRESS, // Giả định địa chỉ
-                phuongThucThanhToan: DEFAULT_PAYMENT_METHOD, // Giả định phương thức
+                diaChiNhanHang: addressString, 
+                phuongThucThanhToan: DEFAULT_PAYMENT_METHOD, 
             };
 
             const orderResponse: OrderResponse = await apiService.createOrder(request);
@@ -132,17 +194,19 @@ const CartPage: React.FC = () => {
     };
 
 
-    if (loading) {
+    if (loading || isAddressLoading) {
         return (
             <div className="container mx-auto p-8 text-center min-h-96 flex items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-                <span className="ml-3 text-lg text-gray-600">Đang tải giỏ hàng...</span>
+                <span className="ml-3 text-lg text-gray-600">Đang tải giỏ hàng và địa chỉ...</span>
             </div>
         );
     }
     
     const cartItems = cart?.items || [];
     const isCartEmpty = cartItems.length === 0;
+    
+    const safeTotal = cart?.tongTienGioHang ?? 0;
 
     return (
         <div className="container mx-auto p-4 lg:p-8">
@@ -188,7 +252,7 @@ const CartPage: React.FC = () => {
                                         </div>
                                         <div>
                                             <h3 className="font-semibold text-gray-900">{item.tenSanPham}</h3>
-                                            <p className="text-sm text-gray-500">{item.giaHienTai.toLocaleString('vi-VN')} đ / sản phẩm</p>
+                                            <p className="text-sm text-gray-500">{(item.giaHienTai ?? 0).toLocaleString('vi-VN')} đ / sản phẩm</p>
                                         </div>
                                     </div>
 
@@ -216,7 +280,7 @@ const CartPage: React.FC = () => {
                                         
                                         {/* Thành tiền */}
                                         <p className="font-bold text-red-600 w-24 text-right">
-                                            {item.thanhTien.toLocaleString('vi-VN')} đ
+                                            {(item.thanhTien ?? 0).toLocaleString('vi-VN')} đ
                                         </p>
                                         
                                         {/* Xóa */}
@@ -240,26 +304,52 @@ const CartPage: React.FC = () => {
                     <div className="bg-white p-6 rounded-xl shadow-2xl border border-gray-100 sticky top-20">
                         <h2 className="text-xl font-bold mb-4 border-b pb-2 text-gray-800">Tóm tắt Đơn hàng</h2>
 
+                        {/* KHU VỰC CHỌN ĐỊA CHỈ */}
+                        <div className="mb-6 space-y-2">
+                             <label htmlFor="shippingAddress" className="block text-sm font-medium text-gray-700">Chọn Địa chỉ nhận hàng:</label>
+                             {addresses.length > 0 ? (
+                                <select
+                                    id="shippingAddress"
+                                    value={selectedAddressId ?? ''}
+                                    onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedAddressId(parseInt(e.target.value))}
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                                    disabled={isOrdering}
+                                >
+                                    {addresses.map(addr => (
+                                        <option key={addr.id} value={addr.id}>
+                                            {formatAddress(addr)}
+                                        </option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <div className="p-3 bg-red-50 border border-red-300 rounded-lg text-red-700 text-sm">
+                                    Bạn chưa có địa chỉ nào được lưu. Vui lòng <Link href="/profile" className="font-semibold underline">thêm địa chỉ</Link> tại Hồ sơ cá nhân.
+                                </div>
+                            )}
+                        </div>
+                        {/* END KHU VỰC CHỌN ĐỊA CHỈ */}
+
+
                         <div className="space-y-3 mb-6">
                             <div className="flex justify-between text-gray-600">
                                 <span>Tổng số lượng ({cart?.tongSoLuong || 0} sản phẩm)</span>
-                                <span>{cart?.tongTienGioHang.toLocaleString('vi-VN') || '0'} đ</span>
+                                <span>{safeTotal.toLocaleString('vi-VN')} đ</span>
                             </div>
                             <div className="flex justify-between font-bold text-lg text-gray-900 border-t pt-3">
                                 <span>Thành tiền (Tạm tính)</span>
-                                <span className="text-red-600">{cart?.tongTienGioHang.toLocaleString('vi-VN') || '0'} đ</span>
+                                <span className="text-red-600">{safeTotal.toLocaleString('vi-VN')} đ</span>
                             </div>
                         </div>
                         
                         <div className="space-y-2 text-sm text-gray-500 p-3 bg-indigo-50 rounded-lg">
-                             <p>Địa chỉ nhận: {DEFAULT_SHIPPING_ADDRESS}</p>
+                             {/* HIỂN THỊ ĐỊA CHỈ ĐÃ CHỌN HOẶC MOCK */}
+                             <p>Địa chỉ nhận: <span className="font-medium text-gray-800">{selectedAddress ? formatAddress(selectedAddress) : 'Vui lòng chọn địa chỉ'}</span></p>
                              <p>Phương thức TT: {DEFAULT_PAYMENT_METHOD}</p>
-                             <p className="font-medium text-red-700">Lưu ý: Cần triển khai các trường địa chỉ/thanh toán thực tế.</p>
                         </div>
 
                         <button
                             onClick={handleCheckout}
-                            disabled={isCartEmpty || isOrdering || isUpdating}
+                            disabled={isCartEmpty || isOrdering || isUpdating || !selectedAddress}
                             className="w-full mt-6 py-3 px-4 bg-red-600 text-white font-semibold rounded-lg shadow-lg hover:bg-red-700 transition duration-200 disabled:opacity-50 flex items-center justify-center"
                         >
                             {isOrdering ? (
@@ -267,7 +357,7 @@ const CartPage: React.FC = () => {
                                     <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Đang đặt hàng...
                                 </>
                             ) : (
-                                `Đặt Hàng (${cart?.tongTienGioHang.toLocaleString('vi-VN') || '0'} đ)`
+                                `Đặt Hàng (${safeTotal.toLocaleString('vi-VN')} đ)`
                             )}
                         </button>
                     </div>
@@ -277,5 +367,4 @@ const CartPage: React.FC = () => {
     );
 };
 
-// *** ĐÂY LÀ CHỖ CẦN THIẾT: Xuất default component ***
 export default CartPage;
